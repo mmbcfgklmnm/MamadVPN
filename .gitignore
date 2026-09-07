@@ -44,7 +44,6 @@ migrate_working_dir/
 **/windows/runner/*.vcxproj
 **/windows/runner/*.vcxproj.filters
 **/windows/runner/*.vcxproj.user
-**/windows/runner/Runner.rc
 **/windows/flutter/generated_plugin_registrant.cc
 **/windows/flutter/generated_plugin_registrant.h
 **/windows/flutter/generated_plugins.cmake
