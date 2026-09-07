@@ -72,18 +72,67 @@ void main() {
       expect(node.name, 'NewYork');
     });
 
-    test('Parse Multiple configs from multiline string', () {
-      const multiline = '''
-vless://u1@h1.com:443?security=none#Node1
-trojan://p1@h2.com:443#Node2
-      ''';
-      final nodes = ConfigParser.parseMultiple(multiline);
-      expect(nodes.length, 2);
-      expect(nodes[0].name, 'Node1');
-      expect(nodes[1].name, 'Node2');
+    test('Parse multiline Base64 encoded subscription', () {
+      const plainList = '''vless://u1@fra.com:443#DE-Node
+vmess://base64payload
+trojan://pass1@ams.com:443#NL-Node''';
+
+      // Base64 encode with newlines embedded (standard v2ray base64)
+      final rawBase64 = base64Encode(utf8.encode(plainList));
+      final multilineBase64 = '${rawBase64.substring(0, 20)}\r\n${rawBase64.substring(20)}';
+
+      final nodes = ConfigParser.parseMultiple(multilineBase64);
+      expect(nodes.length, greaterThanOrEqualTo(2));
+      expect(nodes.any((n) => n.name == 'DE-Node'), isTrue);
+      expect(nodes.any((n) => n.name == 'NL-Node'), isTrue);
     });
 
-    test('Generate Sing-Box configuration', () {
+    test('Parse Clash YAML proxies format', () {
+      const clashYaml = '''
+proxies:
+  - name: "Clash German VLESS"
+    type: vless
+    server: de.example.com
+    port: 443
+    uuid: 1234-5678
+    tls: true
+    servername: de.example.com
+  - name: "Clash Trojan"
+    type: trojan
+    server: tr.example.com
+    port: 443
+    password: mypassword
+''';
+      final nodes = ConfigParser.parseMultiple(clashYaml);
+      expect(nodes.length, 2);
+      expect(nodes[0].name, 'Clash German VLESS');
+      expect(nodes[0].protocol, 'vless');
+      expect(nodes[0].address, 'de.example.com');
+      expect(nodes[1].name, 'Clash Trojan');
+      expect(nodes[1].uuid, 'mypassword');
+    });
+
+    test('Parse Sing-Box JSON outbounds format', () {
+      const singboxJson = '''
+{
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "SingBox VLESS Node",
+      "server": "sb.example.com",
+      "server_port": 443,
+      "uuid": "uuid-sb-123"
+    }
+  ]
+}
+''';
+      final nodes = ConfigParser.parseMultiple(singboxJson);
+      expect(nodes.length, 1);
+      expect(nodes[0].name, 'SingBox VLESS Node');
+      expect(nodes[0].address, 'sb.example.com');
+    });
+
+    test('Generate Sing-Box configuration with Clash API enabled', () {
       const uri = 'vless://uuid123@example.com:443?security=reality&sni=speedtest.net&type=tcp&flow=xtls-rprx-vision&pbk=pubkey123#Frankfurt';
       final node = ConfigParser.parseSingle(uri)!;
       const settings = AppSettings(
@@ -93,6 +142,8 @@ trojan://p1@h2.com:443#Node2
 
       final configJson = ConfigParser.generateSingBoxConfig(node, settings);
       expect(configJson, contains('mamadvpn-tun'));
+      expect(configJson, contains('clash_api'));
+      expect(configJson, contains('127.0.0.1:9090'));
       expect(configJson, contains('speedtest.net'));
       expect(configJson, contains('pubkey123'));
     });

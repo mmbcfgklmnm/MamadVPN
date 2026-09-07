@@ -45,70 +45,7 @@ class ServerController extends ChangeNotifier {
       _activeServer = _servers.first;
     }
 
-    // If initial servers are empty, populate standard default demo servers so user has something out-of-the-box
-    if (_servers.isEmpty) {
-      _populateDefaultNodes();
-    }
     notifyListeners();
-  }
-
-  void _populateDefaultNodes() {
-    _servers = [
-      ServerNode(
-        id: 'mamad_fast_de',
-        name: '🇩🇪 Germany - Frankfurt Superfast',
-        protocol: 'vless',
-        address: 'fra.mamadvpn.org',
-        port: 443,
-        uuid: 'd3b07384-d113-4a1a-a532-6a7e0e7a683a',
-        network: 'tcp',
-        security: 'reality',
-        sni: 'speedtest.net',
-        flow: 'xtls-rprx-vision',
-        publicKey: '6S8m2z2-LqX7fUj_48b8g5V7k9l0m1n2o3p4q5r6s7t',
-        shortId: '8a',
-        fingerprint: 'chrome',
-        ping: 42,
-      ),
-      ServerNode(
-        id: 'mamad_speed_nl',
-        name: '🇳🇱 Netherlands - Amsterdam Ultra',
-        protocol: 'vmess',
-        address: 'ams.mamadvpn.org',
-        port: 443,
-        uuid: 'a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d',
-        network: 'ws',
-        security: 'tls',
-        sni: 'cloud.cloudflare.com',
-        path: '/mamad-ws',
-        ping: 58,
-      ),
-      ServerNode(
-        id: 'mamad_us_east',
-        name: '🇺🇸 US East - New York Fiber',
-        protocol: 'hysteria2',
-        address: 'nyc.mamadvpn.org',
-        port: 8443,
-        uuid: 'mamadSecretPass2026',
-        security: 'tls',
-        sni: 'apple.com',
-        ping: 118,
-      ),
-      ServerNode(
-        id: 'mamad_tr_turkey',
-        name: '🇹🇷 Turkey - Istanbul Low Latency',
-        protocol: 'trojan',
-        address: 'ist.mamadvpn.org',
-        port: 443,
-        uuid: 'trPassMamadVPN',
-        security: 'tls',
-        sni: 'microsoft.com',
-        ping: 35,
-      ),
-    ];
-    _activeServer = _servers.first;
-    _storageService.saveServers(_servers);
-    _storageService.saveActiveServerId(_activeServer?.id);
   }
 
   List<ServerNode> get filteredServers {
