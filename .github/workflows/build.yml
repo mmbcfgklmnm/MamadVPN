@@ -88,7 +88,10 @@ jobs:
         run: flutter config --enable-windows-desktop
 
       - name: Configure Windows Desktop Platform
-        run: flutter create --platforms=windows --project-name mamadvpn .
+        shell: pwsh
+        run: |
+          if (Test-Path windows) { Remove-Item -Recurse -Force windows }
+          flutter create --platforms=windows --project-name mamadvpn .
 
       - name: Verify Environment & Tools
         run: flutter doctor -v
