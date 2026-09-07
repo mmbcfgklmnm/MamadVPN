@@ -68,11 +68,14 @@ jobs:
   # ==========================================
   build-windows:
     name: Build Windows Application
-    runs-on: windows-latest
+    runs-on: windows-2022
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Set up MSVC Developer Environment
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -83,6 +86,9 @@ jobs:
 
       - name: Enable Windows Desktop
         run: flutter config --enable-windows-desktop
+
+      - name: Verify Environment & Tools
+        run: flutter doctor -v
 
       - name: Get Dependencies
         run: flutter pub get
