@@ -28,3 +28,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_subdirectory(flutter)
 add_subdirectory(runner)
+
+# Generated plugin build rules
+include(flutter/ephemeral/generated_plugins.cmake OPTIONAL)
+
+# === Installation ===
+set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
+set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
+
+install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}")
+install(TARGETS flutter_wrapper_app RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}")
+
+install(FILES "${FLUTTER_EPHEMERAL_DIR}/flutter_windows.dll" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}" OPTIONAL)
