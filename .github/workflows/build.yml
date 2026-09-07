@@ -87,6 +87,9 @@ jobs:
       - name: Enable Windows Desktop
         run: flutter config --enable-windows-desktop
 
+      - name: Configure Windows Desktop Platform
+        run: flutter create --platforms=windows .
+
       - name: Verify Environment & Tools
         run: flutter doctor -v
 
