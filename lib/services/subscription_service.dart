@@ -107,8 +107,25 @@ class SubscriptionService {
         headers[name.toLowerCase()] = values.join(', ');
       });
 
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw HttpException('Server returned HTTP status ${response.statusCode}', uri: uri);
+      }
+
       final bodyBytes = await response.fold<List<int>>([], (prev, element) => prev..addAll(element));
-      final body = utf8.decode(bodyBytes, allowMalformed: true);
+
+      List<int> decodedBytes = bodyBytes;
+      final encoding = headers['content-encoding']?.toLowerCase();
+      try {
+        if (encoding == 'gzip') {
+          decodedBytes = gzip.decode(bodyBytes);
+        } else if (encoding == 'deflate') {
+          decodedBytes = zlib.decode(bodyBytes);
+        }
+      } catch (_) {
+        decodedBytes = bodyBytes;
+      }
+
+      final body = utf8.decode(decodedBytes, allowMalformed: true);
 
       return (body, headers);
     } finally {

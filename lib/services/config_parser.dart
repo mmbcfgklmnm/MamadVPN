@@ -411,7 +411,7 @@ class ConfigParser {
     }
   }
 
-  /// Builds a full Sing-Box or Xray runtime configuration JSON with Clash API enabled for live traffic monitoring
+  /// Builds a full Sing-Box runtime configuration JSON with Clash API enabled for live traffic monitoring
   static String generateSingBoxConfig(ServerNode node, AppSettings settings) {
     final Map<String, dynamic> config = {
       'log': {'level': 'info', 'timestamp': true},
@@ -470,21 +470,106 @@ class ConfigParser {
           'tag': 'direct',
         },
         {
+          'type': 'dns',
+          'tag': 'dns-out',
+        },
+        {
           'type': 'block',
           'tag': 'block',
         }
       ],
       'route': {
         'auto_detect_interface': true,
+        'final': 'proxy',
         'rules': [
-          {'protocol': 'dns', 'outbound': 'dns-remote'},
+          {'protocol': 'dns', 'outbound': 'dns-out'},
           if (settings.routingMode == RoutingMode.bypassLanAndIran) ...[
             {'geoip': 'private', 'outbound': 'direct'},
             {'geoip': 'ir', 'outbound': 'direct'},
             {'geosite': 'ir', 'outbound': 'direct'},
             {'geosite': 'category-ads-all', 'outbound': 'block'},
           ],
-          {'outbound': 'proxy'},
+        ]
+      }
+    };
+
+    return const JsonEncoder.withIndent('  ').convert(config);
+  }
+
+  /// Builds a full Xray-core runtime configuration JSON with stats service enabled for live traffic monitoring
+  static String generateXrayConfig(ServerNode node, AppSettings settings) {
+    final Map<String, dynamic> config = {
+      'log': {'loglevel': 'warning'},
+      'stats': <String, dynamic>{},
+      'api': {
+        'tag': 'api',
+        'services': ['StatsService'],
+      },
+      'policy': {
+        'system': {
+          'statsInboundUplink': true,
+          'statsInboundDownlink': true,
+        }
+      },
+      'inbounds': [
+        // Mixed SOCKS5/HTTP inbound for Windows system proxy
+        {
+          'tag': 'proxy-in',
+          'port': settings.mixedPort,
+          'listen': '127.0.0.1',
+          'protocol': 'mixed',
+          'sniffing': {
+            'enabled': true,
+            'destOverride': ['http', 'tls', 'quic'],
+          }
+        },
+        // Stats API inbound
+        {
+          'tag': 'api',
+          'port': 10085,
+          'listen': '127.0.0.1',
+          'protocol': 'dokodemo-door',
+          'settings': {
+            'address': '127.0.0.1',
+          }
+        },
+      ],
+      'outbounds': [
+        node.toXrayOutbound(),
+        {
+          'protocol': 'freedom',
+          'tag': 'direct',
+        },
+        {
+          'protocol': 'blackhole',
+          'tag': 'block',
+        }
+      ],
+      'routing': {
+        'domainStrategy': 'IPIfNonMatch',
+        'rules': [
+          {
+            'type': 'field',
+            'inboundTag': ['api'],
+            'outboundTag': 'api',
+          },
+          if (settings.routingMode == RoutingMode.bypassLanAndIran) ...[
+            {
+              'type': 'field',
+              'ip': ['geoip:private', 'geoip:ir'],
+              'outboundTag': 'direct',
+            },
+            {
+              'type': 'field',
+              'domain': ['geosite:ir', 'geosite:category-ads-all'],
+              'outboundTag': 'direct',
+            },
+          ],
+          {
+            'type': 'field',
+            'network': 'tcp,udp',
+            'outboundTag': 'proxy',
+          }
         ]
       }
     };

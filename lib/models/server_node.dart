@@ -140,7 +140,7 @@ class ServerNode {
       outbound['tls'] = tls;
     }
 
-    // Transport (WebSocket / gRPC)
+    // Transport (WebSocket / gRPC / HTTPUpgrade)
     if (network == 'ws') {
       outbound['transport'] = {
         'type': 'ws',
@@ -152,8 +152,137 @@ class ServerNode {
         'type': 'grpc',
         'service_name': path,
       };
+    } else if (network == 'xhttp' || network == 'splithttp' || network == 'httpupgrade') {
+      outbound['transport'] = {
+        'type': 'httpupgrade',
+        'path': path.isEmpty ? '/' : path,
+        if (sni.isNotEmpty) 'host': sni,
+      };
     }
 
+    return outbound;
+  }
+
+  /// Generates an Xray-core compatible outbound configuration object
+  Map<String, dynamic> toXrayOutbound() {
+    final Map<String, dynamic> outbound = {
+      'tag': 'proxy',
+      'protocol': protocol == 'hysteria2' ? 'vless' : protocol,
+    };
+
+    if (protocol == 'vless') {
+      outbound['settings'] = {
+        'vnext': [
+          {
+            'address': address,
+            'port': port,
+            'users': [
+              {
+                'id': uuid,
+                'encryption': encryption.isNotEmpty ? encryption : 'none',
+                if (flow.isNotEmpty) 'flow': flow,
+              }
+            ]
+          }
+        ]
+      };
+    } else if (protocol == 'vmess') {
+      outbound['settings'] = {
+        'vnext': [
+          {
+            'address': address,
+            'port': port,
+            'users': [
+              {
+                'id': uuid,
+                'alterId': 0,
+                'security': encryption.isNotEmpty ? encryption : 'auto',
+              }
+            ]
+          }
+        ]
+      };
+    } else if (protocol == 'trojan') {
+      outbound['settings'] = {
+        'servers': [
+          {
+            'address': address,
+            'port': port,
+            'password': uuid,
+          }
+        ]
+      };
+    } else if (protocol == 'shadowsocks') {
+      outbound['settings'] = {
+        'servers': [
+          {
+            'address': address,
+            'port': port,
+            'method': encryption.isNotEmpty ? encryption : 'chacha20-ietf-poly1305',
+            'password': uuid,
+          }
+        ]
+      };
+    }
+
+    final streamSettings = <String, dynamic>{};
+
+    // Transport
+    final net = network.toLowerCase();
+    if (net == 'xhttp' || net == 'splithttp') {
+      streamSettings['network'] = 'xhttp';
+      streamSettings['xhttpSettings'] = {
+        'path': path.isNotEmpty ? path : '/',
+        'host': sni.isNotEmpty ? sni : address,
+        'mode': 'auto',
+      };
+    } else if (net == 'ws') {
+      streamSettings['network'] = 'ws';
+      streamSettings['wsSettings'] = {
+        'path': path.isNotEmpty ? path : '/',
+        'headers': {
+          'Host': sni.isNotEmpty ? sni : address,
+        }
+      };
+    } else if (net == 'grpc') {
+      streamSettings['network'] = 'grpc';
+      streamSettings['grpcSettings'] = {
+        'serviceName': path,
+        'multiMode': true,
+      };
+    } else if (net == 'httpupgrade') {
+      streamSettings['network'] = 'httpupgrade';
+      streamSettings['httpupgradeSettings'] = {
+        'path': path.isNotEmpty ? path : '/',
+        'host': sni.isNotEmpty ? sni : address,
+      };
+    } else {
+      streamSettings['network'] = 'tcp';
+    }
+
+    // Security
+    if (security == 'reality') {
+      streamSettings['security'] = 'reality';
+      streamSettings['realitySettings'] = {
+        'show': false,
+        'fingerprint': fingerprint.isNotEmpty ? fingerprint : 'chrome',
+        'serverName': sni.isNotEmpty ? sni : address,
+        'publicKey': publicKey,
+        'shortId': shortId,
+        'spiderX': '',
+      };
+    } else if (security == 'tls') {
+      streamSettings['security'] = 'tls';
+      streamSettings['tlsSettings'] = {
+        'serverName': sni.isNotEmpty ? sni : address,
+        'fingerprint': fingerprint.isNotEmpty ? fingerprint : 'chrome',
+        if (alpn.isNotEmpty) 'alpn': alpn,
+      };
+    } else {
+      streamSettings['security'] = 'none';
+    }
+
+    outbound['streamSettings'] = streamSettings;
     return outbound;
   }
 }

@@ -24,6 +24,8 @@ class VpnCoreService {
   String? get errorMessage => _errorMessage;
 
   Process? _coreProcess;
+  String _activeEngine = 'unknown';
+  String get activeEngine => _activeEngine;
 
   /// Start VPN connection with the given node and app settings
   Future<bool> connect(ServerNode node, AppSettings settings) async {
@@ -31,9 +33,8 @@ class VpnCoreService {
     _errorMessage = null;
 
     try {
-      final configJson = ConfigParser.generateSingBoxConfig(node, settings);
-
       if (Platform.isAndroid) {
+        final configJson = ConfigParser.generateSingBoxConfig(node, settings);
         final bool prepared = await _androidChannel.invokeMethod('prepareVpn') ?? false;
         if (!prepared) {
           _state = VpnState.error;
@@ -54,7 +55,7 @@ class VpnCoreService {
           return false;
         }
       } else if (Platform.isWindows) {
-        return await _connectWindows(configJson, settings);
+        return await _connectWindows(node, settings);
       } else {
         await Future.delayed(const Duration(milliseconds: 1000));
         _state = VpnState.connected;
@@ -67,30 +68,44 @@ class VpnCoreService {
     }
   }
 
-  /// Real Windows VPN Core Execution & System Proxy Setup
-  Future<bool> _connectWindows(String configJson, AppSettings settings) async {
+  /// Real Windows VPN Core Execution (Xray-core / Sing-Box) & System Proxy Setup
+  Future<bool> _connectWindows(ServerNode node, AppSettings settings) async {
     try {
-      // 1. Write config.json to app storage
       final appDir = await _getAppDirectory();
-      final configFile = File('${appDir.path}\\config.json');
-      await configFile.writeAsString(configJson);
 
-      // 2. Locate or download Sing-Box core executable
-      final singBoxExe = await _resolveSingBoxExecutable(appDir);
-      if (singBoxExe == null) {
+      // 1. Locate available proxy core engine
+      final xrayExe = await _resolveExecutable('xray.exe', appDir);
+      final singBoxExe = await _resolveExecutable('sing-box.exe', appDir);
+
+      if (xrayExe == null && singBoxExe == null) {
         _state = VpnState.error;
-        _errorMessage = 'Sing-Box engine (sing-box.exe) not found. Downloading core...';
+        _errorMessage = 'VPN Core not found (neither xray.exe nor sing-box.exe located in application folder).';
         return false;
       }
 
-      // 3. Terminate any previous core instances
-      await _killSingBoxProcesses();
+      // 2. Determine preferred engine
+      final isXhttp = node.network.toLowerCase() == 'xhttp' || node.network.toLowerCase() == 'splithttp';
+      final useXray = (xrayExe != null) && (isXhttp || singBoxExe == null);
 
-      // 4. Launch Sing-Box core process
+      final exeToRun = useXray ? xrayExe! : singBoxExe!;
+      _activeEngine = useXray ? 'Xray-core' : 'Sing-Box';
+
+      // 3. Generate engine-specific configuration
+      final configJson = useXray
+          ? ConfigParser.generateXrayConfig(node, settings)
+          : ConfigParser.generateSingBoxConfig(node, settings);
+
+      final configFile = File('${appDir.path}\\config.json');
+      await configFile.writeAsString(configJson);
+
+      // 4. Terminate any previous core instances
+      await _killCoreProcesses();
+
+      // 5. Launch proxy core process
       _coreProcess = await Process.start(
-        singBoxExe.path,
+        exeToRun.path,
         ['run', '-c', configFile.path],
-        workingDirectory: appDir.path,
+        workingDirectory: exeToRun.parent.path,
         mode: ProcessStartMode.normal,
       );
 
@@ -98,17 +113,25 @@ class VpnCoreService {
       _coreProcess!.stderr.transform(utf8.decoder).listen((data) {
         processError += data;
       });
+      _coreProcess!.stdout.transform(utf8.decoder).listen((data) {
+        if (data.contains('FATAL') || data.contains('Failed to start')) {
+          processError += data;
+        }
+      });
 
       // Wait a moment to verify process does not exit immediately on startup
       await Future.delayed(const Duration(milliseconds: 1200));
       if (await _isProcessDead(_coreProcess)) {
         _state = VpnState.error;
-        _errorMessage = 'VPN Core failed to start: ${processError.isNotEmpty ? processError : "Invalid server configuration"}';
+        _errorMessage = '$_activeEngine exited unexpectedly: ${processError.isNotEmpty ? processError.trim() : "Invalid configuration or port occupied"}';
+        await disconnect();
         return false;
       }
 
-      // 5. Enable Windows System Proxy
-      await _setWindowsSystemProxy(enabled: true, port: settings.mixedPort);
+      // 6. Apply Windows System Proxy (SOCKS5/HTTP mixed on 127.0.0.1:port)
+      if (settings.coreMode == CoreMode.systemProxy || useXray) {
+        await _setWindowsSystemProxy(enabled: true, port: settings.mixedPort);
+      }
 
       _state = VpnState.connected;
       return true;
@@ -128,12 +151,12 @@ class VpnCoreService {
       if (Platform.isAndroid) {
         await _androidChannel.invokeMethod('stopVpn');
       } else if (Platform.isWindows) {
-        // Kill Sing-box core
+        // Kill core process
         if (_coreProcess != null) {
           _coreProcess!.kill();
           _coreProcess = null;
         }
-        await _killSingBoxProcesses();
+        await _killCoreProcesses();
 
         // Reset Windows system proxy
         await _setWindowsSystemProxy(enabled: false);
@@ -194,8 +217,9 @@ class VpnCoreService {
     } catch (_) {}
   }
 
-  Future<void> _killSingBoxProcesses() async {
+  Future<void> _killCoreProcesses() async {
     try {
+      await Process.run('taskkill', ['/F', '/IM', 'xray.exe', '/T']);
       await Process.run('taskkill', ['/F', '/IM', 'sing-box.exe', '/T']);
     } catch (_) {}
   }
@@ -221,23 +245,23 @@ class VpnCoreService {
     return dir;
   }
 
-  Future<File?> _resolveSingBoxExecutable(Directory appDir) async {
+  Future<File?> _resolveExecutable(String exeName, Directory appDir) async {
     // 1. Check in same folder as MamadVPN executable
     final exeDir = File(Platform.resolvedExecutable).parent;
-    final localExe = File('${exeDir.path}\\sing-box.exe');
+    final localExe = File('${exeDir.path}\\$exeName');
     if (await localExe.exists()) return localExe;
 
     // 2. Check in MamadVPN AppData folder
-    final appDataExe = File('${appDir.path}\\sing-box.exe');
+    final appDataExe = File('${appDir.path}\\$exeName');
     if (await appDataExe.exists()) return appDataExe;
 
     // 3. Check current working directory
-    final currentDirExe = File('${Directory.current.path}\\sing-box.exe');
+    final currentDirExe = File('${Directory.current.path}\\$exeName');
     if (await currentDirExe.exists()) return currentDirExe;
 
     // 4. Check system PATH
     try {
-      final res = await Process.run('where', ['sing-box.exe']);
+      final res = await Process.run('where', [exeName]);
       if (res.exitCode == 0 && res.stdout.toString().trim().isNotEmpty) {
         final path = res.stdout.toString().split(RegExp(r'[\r\n]+')).first.trim();
         return File(path);

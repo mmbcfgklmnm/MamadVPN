@@ -105,8 +105,27 @@ class _AddServerDialogState extends State<AddServerDialog> with SingleTickerProv
           const SnackBar(content: Text('Subscription imported successfully')),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: ${subController.errorMessage ?? "Unknown error"}')),
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.error_outline_rounded, color: Colors.redAccent),
+                SizedBox(width: 8),
+                Text('Import Failed'),
+              ],
+            ),
+            content: Text(
+              subController.errorMessage ?? 'Could not retrieve subscription nodes. Check your internet connection or URL.',
+              style: const TextStyle(fontSize: 13),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
         );
       }
     }
@@ -224,42 +243,97 @@ class _AddServerDialogState extends State<AddServerDialog> with SingleTickerProv
                   ),
 
                   // Tab 2: Subscription URL
-                  Column(
-                    children: [
-                      TextField(
-                        controller: _subNameController,
-                        decoration: const InputDecoration(
-                          labelText: 'Subscription Name',
-                          hintText: 'e.g. Premium VIP Nodes',
+                  SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextField(
+                          controller: _subNameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Subscription Name',
+                            hintText: 'e.g. Premium VIP Nodes',
+                            prefixIcon: Icon(Icons.bookmark_outline_rounded),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 14),
-                      TextField(
-                        controller: _subUrlController,
-                        decoration: const InputDecoration(
-                          labelText: 'Subscription URL',
-                          hintText: 'https://example.com/api/v1/client/subscribe?...',
-                        ),
-                      ),
-                      const Spacer(),
-                      Consumer<SubscriptionController>(
-                        builder: (context, controller, child) {
-                          return SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: controller.isLoading ? null : _handleAddSubscription,
-                              child: controller.isLoading
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    )
-                                  : const Text('Fetch & Save Subscription'),
+                        const SizedBox(height: 14),
+                        TextField(
+                          controller: _subUrlController,
+                          decoration: InputDecoration(
+                            labelText: 'Subscription URL',
+                            hintText: 'https://...',
+                            prefixIcon: const Icon(Icons.link_rounded),
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.paste_rounded, size: 18),
+                              tooltip: 'Paste URL',
+                              onPressed: () async {
+                                final data = await Clipboard.getData(Clipboard.kTextPlain);
+                                if (data?.text != null) {
+                                  _subUrlController.text = data!.text!.trim();
+                                }
+                              },
                             ),
-                          );
-                        },
-                      ),
-                    ],
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.darkSurfaceLight.withOpacity(0.5) : Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline, size: 18, color: isDark ? AppColors.neonCyan : AppColors.lightPrimary),
+                              const SizedBox(width: 8),
+                              const Expanded(
+                                child: Text(
+                                  'Supports Base64, Clash YAML, and Sing-Box JSON subscriptions. Handles custom ports (e.g. 2096) and SSL bypass.',
+                                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Consumer<SubscriptionController>(
+                          builder: (context, controller, child) {
+                            return SizedBox(
+                              width: double.infinity,
+                              height: 48,
+                              child: ElevatedButton(
+                                onPressed: controller.isLoading ? null : _handleAddSubscription,
+                                style: ElevatedButton.styleFrom(
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                ),
+                                child: controller.isLoading
+                                    ? Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2.5,
+                                              color: isDark ? Colors.black : Colors.white,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          const Text(
+                                            'Fetching Subscription...',
+                                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                          ),
+                                        ],
+                                      )
+                                    : const Text(
+                                        'Fetch & Save Subscription',
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                      ),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ),
 
                   // Tab 3: Manual Entry

@@ -132,7 +132,7 @@ proxies:
       expect(nodes[0].address, 'sb.example.com');
     });
 
-    test('Generate Sing-Box configuration with Clash API enabled', () {
+    test('Generate Sing-Box configuration with Clash API enabled and valid routing', () {
       const uri = 'vless://uuid123@example.com:443?security=reality&sni=speedtest.net&type=tcp&flow=xtls-rprx-vision&pbk=pubkey123#Frankfurt';
       final node = ConfigParser.parseSingle(uri)!;
       const settings = AppSettings(
@@ -146,6 +146,31 @@ proxies:
       expect(configJson, contains('127.0.0.1:9090'));
       expect(configJson, contains('speedtest.net'));
       expect(configJson, contains('pubkey123'));
+      expect(configJson, contains('dns-out'));
+      expect(configJson, contains('"final": "proxy"'));
+    });
+
+    test('Parse VLESS XHTTP URI and generate Xray configuration', () {
+      const uri = 'vless://a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d@chatgpt.com:8080?security=none&type=xhttp&path=/stream#CDN%20CLOUDFLARE';
+      final node = ConfigParser.parseSingle(uri);
+
+      expect(node, isNotNull);
+      expect(node!.protocol, 'vless');
+      expect(node.address, 'chatgpt.com');
+      expect(node.port, 8080);
+      expect(node.network, 'xhttp');
+      expect(node.path, '/stream');
+
+      const settings = AppSettings(
+        routingMode: RoutingMode.bypassLanAndIran,
+        coreMode: CoreMode.systemProxy,
+      );
+
+      final xrayConfig = ConfigParser.generateXrayConfig(node, settings);
+      expect(xrayConfig, contains('"network": "xhttp"'));
+      expect(xrayConfig, contains('"path": "/stream"'));
+      expect(xrayConfig, contains('StatsService'));
+      expect(xrayConfig, contains('10085'));
     });
   });
 }

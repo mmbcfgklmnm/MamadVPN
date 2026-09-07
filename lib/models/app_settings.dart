@@ -27,7 +27,7 @@ class AppSettings {
     this.themeMode = ThemeMode.dark,
     this.accentColor = 'cyan',
     this.routingMode = RoutingMode.bypassLanAndIran,
-    this.coreMode = CoreMode.tun,
+    this.coreMode = CoreMode.systemProxy,
     this.dnsServer = '1.1.1.1',
     this.autoConnect = false,
     this.killSwitch = false,
@@ -86,8 +86,8 @@ class AppSettings {
     if (json['routingMode'] == 'global') routing = RoutingMode.global;
     if (json['routingMode'] == 'direct') routing = RoutingMode.direct;
 
-    CoreMode core = CoreMode.tun;
-    if (json['coreMode'] == 'systemProxy') core = CoreMode.systemProxy;
+    CoreMode core = CoreMode.systemProxy;
+    if (json['coreMode'] == 'tun') core = CoreMode.tun;
 
     return AppSettings(
       themeMode: theme,

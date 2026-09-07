@@ -103,7 +103,7 @@ jobs:
       - name: Build Windows Release Executable
         run: flutter build windows --release
 
-      - name: Bundle Sing-Box Core & Wintun Driver
+      - name: Bundle Xray-Core, Sing-Box & Wintun Driver
         shell: pwsh
         run: |
           $buildDir = "build/windows/x64/runner/Release"
@@ -111,24 +111,24 @@ jobs:
             $buildDir = "build/windows/runner/Release"
           }
 
-          # 1. Download official Sing-Box Windows Core
+          # 1. Download official Xray-Core Windows Core (v26.3.27 - v2rayNG/v2rayN engine)
+          Write-Host "Downloading Xray-core..."
+          Invoke-WebRequest -Uri "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-windows-64.zip" -OutFile "xray.zip"
+          Expand-Archive -Path "xray.zip" -DestinationPath "xray-temp" -Force
+          Copy-Item "xray-temp/xray.exe" -Destination "$buildDir\xray.exe" -Force
+          if (Test-Path "xray-temp/geoip.dat") { Copy-Item "xray-temp/geoip.dat" -Destination "$buildDir\geoip.dat" -Force }
+          if (Test-Path "xray-temp/geosite.dat") { Copy-Item "xray-temp/geosite.dat" -Destination "$buildDir\geosite.dat" -Force }
+          if (Test-Path "xray-temp/wintun.dll") { Copy-Item "xray-temp/wintun.dll" -Destination "$buildDir\wintun.dll" -Force }
+          Write-Host "Xray-Core bundled successfully into $buildDir"
+
+          # 2. Download official Sing-Box Windows Core (v1.11.4)
           Write-Host "Downloading Sing-Box core..."
-          Invoke-WebRequest -Uri "https://github.com/SagerNet/sing-box/releases/download/v1.9.7/sing-box-1.9.7-windows-amd64.zip" -OutFile "sing-box.zip"
+          Invoke-WebRequest -Uri "https://github.com/SagerNet/sing-box/releases/download/v1.11.4/sing-box-1.11.4-windows-amd64.zip" -OutFile "sing-box.zip"
           Expand-Archive -Path "sing-box.zip" -DestinationPath "sing-box-temp" -Force
           $singBoxExe = Get-ChildItem -Path "sing-box-temp" -Filter "sing-box.exe" -Recurse | Select-Object -First 1
           if ($singBoxExe) {
             Copy-Item $singBoxExe.FullName -Destination "$buildDir\sing-box.exe" -Force
             Write-Host "Sing-Box bundled successfully into $buildDir"
-          }
-
-          # 2. Download Wintun driver for TUN Virtual Adapter mode
-          Write-Host "Downloading Wintun driver..."
-          Invoke-WebRequest -Uri "https://www.wintun.net/builds/wintun-0.14.1.zip" -OutFile "wintun.zip"
-          Expand-Archive -Path "wintun.zip" -DestinationPath "wintun-temp" -Force
-          $wintunDll = Get-ChildItem -Path "wintun-temp" -Filter "wintun.dll" -Recurse | Where-Object { $_.FullName -like "*amd64*" } | Select-Object -First 1
-          if ($wintunDll) {
-            Copy-Item $wintunDll.FullName -Destination "$buildDir\wintun.dll" -Force
-            Write-Host "Wintun bundled successfully into $buildDir"
           }
 
       - name: Package Windows Release ZIP

@@ -35,6 +35,24 @@ class ServerController extends ChangeNotifier {
 
   void _loadFromStorage() {
     _servers = _storageService.loadServers();
+
+    // Auto-migration: Purge any legacy mock nodes (mamadvpn.org or old demo IDs)
+    final initialCount = _servers.length;
+    _servers.removeWhere((s) =>
+        s.address.toLowerCase().contains('mamadvpn.org') ||
+        s.id.startsWith('mamad_fast') ||
+        s.id.startsWith('mamad_speed') ||
+        s.id.startsWith('mamad_us') ||
+        s.id.startsWith('mamad_tr') ||
+        s.name.contains('Frankfurt Superfast') ||
+        s.name.contains('Amsterdam Ultra') ||
+        s.name.contains('New York Fiber') ||
+        s.name.contains('Istanbul Low Latency')
+    );
+    if (_servers.length != initialCount) {
+      _storageService.saveServers(_servers);
+    }
+
     final activeId = _storageService.loadActiveServerId();
     if (activeId != null && _servers.isNotEmpty) {
       _activeServer = _servers.firstWhere(
@@ -43,6 +61,8 @@ class ServerController extends ChangeNotifier {
       );
     } else if (_servers.isNotEmpty) {
       _activeServer = _servers.first;
+    } else {
+      _activeServer = null;
     }
 
     notifyListeners();
@@ -143,6 +163,14 @@ class ServerController extends ChangeNotifier {
       _activeServer = _servers.isNotEmpty ? _servers.first : null;
       _storageService.saveActiveServerId(_activeServer?.id);
     }
+    _storageService.saveServers(_servers);
+    notifyListeners();
+  }
+
+  void clearAllServers() {
+    _servers.clear();
+    _activeServer = null;
+    _storageService.saveActiveServerId(null);
     _storageService.saveServers(_servers);
     notifyListeners();
   }

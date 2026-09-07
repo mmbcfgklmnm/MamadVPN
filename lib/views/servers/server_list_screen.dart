@@ -34,6 +34,27 @@ class ServerListScreen extends StatelessWidget {
               context.read<ServerController>().pingAll();
             },
           ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded),
+            tooltip: 'Options',
+            onSelected: (val) {
+              if (val == 'clear_all') {
+                _showClearAllConfirmation(context);
+              }
+            },
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'clear_all',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_sweep_rounded, color: Colors.redAccent, size: 20),
+                    SizedBox(width: 8),
+                    Text('Delete All Nodes', style: TextStyle(color: Colors.redAccent, fontSize: 13)),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -240,6 +261,42 @@ class ServerListScreen extends StatelessWidget {
               ? Colors.transparent
               : (isDark ? AppColors.darkCardBorder : AppColors.lightCardBorder),
         ),
+      ),
+    );
+  }
+
+  void _showClearAllConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('Delete All Nodes?'),
+          ],
+        ),
+        content: const Text('Are you sure you want to remove all servers from the list?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              context.read<ServerController>().clearAllServers();
+              Navigator.of(ctx).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('All servers have been cleared')),
+              );
+            },
+            child: const Text('Delete All'),
+          ),
+        ],
       ),
     );
   }
