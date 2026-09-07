@@ -1,0 +1,147 @@
+name: Build & Release MamadVPN
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    tags:
+      - "v*"
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # ==========================================
+  # Android Build Job
+  # ==========================================
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.x"
+          channel: "stable"
+          cache: true
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Run Tests
+        run: flutter test
+
+      - name: Build Android Release APK (Universal)
+        run: flutter build apk --release
+
+      - name: Build Android Release APK (Split Per ABI)
+        run: flutter build apk --split-per-abi --release
+
+      - name: Rename APKs for Clarity
+        run: |
+          mkdir -p output/android
+          cp build/app/outputs/flutter-apk/app-release.apk output/android/MamadVPN-Universal.apk
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk output/android/MamadVPN-arm64-v8a.apk
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk output/android/MamadVPN-armeabi-v7a.apk
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk output/android/MamadVPN-x86_64.apk
+
+      - name: Upload Android Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: MamadVPN-Android-APKs
+          path: output/android/*.apk
+
+  # ==========================================
+  # Windows Build Job
+  # ==========================================
+  build-windows:
+    name: Build Windows Application
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.x"
+          channel: "stable"
+          cache: true
+
+      - name: Enable Windows Desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Run Tests
+        run: flutter test
+
+      - name: Build Windows Release Executable
+        run: flutter build windows --release
+
+      - name: Package Windows Release ZIP
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path output/windows
+          $buildDir = "build/windows/x64/runner/Release"
+          if (Test-Path $buildDir) {
+            Compress-Archive -Path "$buildDir/*" -DestinationPath "output/windows/MamadVPN-Windows-x64.zip" -Force
+          } else {
+            # Fallback path if target architecture is default runner
+            Compress-Archive -Path "build/windows/runner/Release/*" -DestinationPath "output/windows/MamadVPN-Windows-x64.zip" -Force
+          }
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: MamadVPN-Windows-x64
+          path: output/windows/MamadVPN-Windows-x64.zip
+
+  # ==========================================
+  # Release Job (Triggers on Git Tags)
+  # ==========================================
+  release:
+    name: Create GitHub Release
+    needs: [build-android, build-windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Android Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: MamadVPN-Android-APKs
+          path: release-assets/android
+
+      - name: Download Windows Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: MamadVPN-Windows-x64
+          path: release-assets/windows
+
+      - name: Draft GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/android/*.apk
+            release-assets/windows/*.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: false
