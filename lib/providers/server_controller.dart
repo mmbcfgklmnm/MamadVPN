@@ -64,8 +64,6 @@ class ServerController extends ChangeNotifier {
     } else {
       _activeServer = null;
     }
-
-    notifyListeners();
   }
 
   List<ServerNode> get filteredServers {

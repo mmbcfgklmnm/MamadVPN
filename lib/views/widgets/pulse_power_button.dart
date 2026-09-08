@@ -38,6 +38,7 @@ class _PulsePowerButtonState extends State<PulsePowerButton> with SingleTickerPr
 
   @override
   void dispose() {
+    _animController.stop();
     _animController.dispose();
     super.dispose();
   }

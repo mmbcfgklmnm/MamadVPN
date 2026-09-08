@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,6 +11,7 @@ import 'package:mamadvpn/providers/vpn_controller.dart';
 
 void main() {
   testWidgets('MamadVPN app loads and renders dashboard', (WidgetTester tester) async {
+    TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     final storageService = StorageService(prefs);
@@ -27,6 +29,9 @@ void main() {
     );
 
     // Verify MamadVPN dashboard title renders
-    expect(find.text('MamadVPN'), findsOneWidget);
+    expect(find.text('MamadVPN'), findsWidgets);
+
+    // Cleanly unmount widget tree to dispose all active controllers & animation tickers
+    await tester.pumpWidget(const SizedBox());
   });
 }

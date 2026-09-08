@@ -76,7 +76,7 @@ class VpnController extends ChangeNotifier {
   @override
   void dispose() {
     _trafficSub?.cancel();
-    _trafficService.dispose();
+    _trafficSub = null;
     super.dispose();
   }
 }
