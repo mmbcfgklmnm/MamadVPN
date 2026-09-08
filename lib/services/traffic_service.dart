@@ -25,6 +25,11 @@ class TrafficService {
     _lastPollTime = null;
     _timer?.cancel();
 
+    if (Platform.isAndroid) {
+      // On Android, real metrics are pushed reactively via updateAndroidMetrics
+      return;
+    }
+
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) async {
       if (_connectionStartTime == null) return;
 
@@ -109,6 +114,24 @@ class TrafficService {
     _lastPollTime = now;
 
     return (downSpeed, upSpeed, totalDown, totalUp);
+  }
+
+  /// Real-time telemetry ingestion from Android Xray-core (V2RayStatus)
+  void updateAndroidMetrics({
+    required double downloadSpeed,
+    required double uploadSpeed,
+    required int sessionDownloaded,
+    required int sessionUploaded,
+    required Duration connectedDuration,
+  }) {
+    _currentStats = TrafficStats(
+      downloadSpeed: downloadSpeed,
+      uploadSpeed: uploadSpeed,
+      sessionDownloaded: sessionDownloaded,
+      sessionUploaded: sessionUploaded,
+      connectedDuration: connectedDuration,
+    );
+    _statsController.add(_currentStats);
   }
 
   void stopMonitoring() {

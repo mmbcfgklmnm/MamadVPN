@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/services.dart';
+import 'package:flutter_v2ray_client/flutter_v2ray.dart';
 import '../models/server_node.dart';
 import '../models/app_settings.dart';
 import 'config_parser.dart';
+import 'traffic_service.dart';
 
 enum VpnState {
   disconnected,
@@ -15,7 +16,7 @@ enum VpnState {
 }
 
 class VpnCoreService {
-  static const MethodChannel _androidChannel = MethodChannel('com.mamad.vpn/engine');
+  final TrafficService? _trafficService;
 
   VpnState _state = VpnState.disconnected;
   VpnState get state => _state;
@@ -27,6 +28,55 @@ class VpnCoreService {
   String _activeEngine = 'unknown';
   String get activeEngine => _activeEngine;
 
+  void Function(VpnState state)? onStateChanged;
+
+  // Android native Xray-core client instance (lazily initialized on Android)
+  V2ray? _v2rayInstance;
+  bool _isV2rayInitialized = false;
+
+  VpnCoreService({TrafficService? trafficService}) : _trafficService = trafficService;
+
+  V2ray get _androidV2ray {
+    return _v2rayInstance ??= V2ray(
+      onStatusChanged: (status) {
+        _handleAndroidV2RayStatus(status);
+      },
+    );
+  }
+
+  void _handleAndroidV2RayStatus(V2RayStatus status) {
+    final s = status.state.toLowerCase();
+    if (s.contains('connected')) {
+      _state = VpnState.connected;
+    } else if (s.contains('connecting')) {
+      _state = VpnState.connecting;
+    } else if (s.contains('disconnect')) {
+      _state = VpnState.disconnected;
+    }
+    onStateChanged?.call(_state);
+
+    if (_trafficService != null) {
+      Duration duration = Duration.zero;
+      try {
+        final parts = status.duration.split(':');
+        if (parts.length == 3) {
+          final h = int.tryParse(parts[0]) ?? 0;
+          final m = int.tryParse(parts[1]) ?? 0;
+          final sec = int.tryParse(parts[2]) ?? 0;
+          duration = Duration(hours: h, minutes: m, seconds: sec);
+        }
+      } catch (_) {}
+
+      _trafficService.updateAndroidMetrics(
+        downloadSpeed: status.downloadSpeed.toDouble(),
+        uploadSpeed: status.uploadSpeed.toDouble(),
+        sessionDownloaded: status.download,
+        sessionUploaded: status.upload,
+        connectedDuration: duration,
+      );
+    }
+  }
+
   /// Start VPN connection with the given node and app settings
   Future<bool> connect(ServerNode node, AppSettings settings) async {
     _state = VpnState.connecting;
@@ -34,26 +84,7 @@ class VpnCoreService {
 
     try {
       if (Platform.isAndroid) {
-        final configJson = ConfigParser.generateSingBoxConfig(node, settings);
-        final bool prepared = await _androidChannel.invokeMethod('prepareVpn') ?? false;
-        if (!prepared) {
-          _state = VpnState.error;
-          _errorMessage = 'VPN permission was rejected by user';
-          return false;
-        }
-
-        final bool success = await _androidChannel.invokeMethod('startVpn', {
-          'config': configJson,
-        }) ?? false;
-
-        if (success) {
-          _state = VpnState.connected;
-          return true;
-        } else {
-          _state = VpnState.error;
-          _errorMessage = 'Failed to start Android VPN service';
-          return false;
-        }
+        return await _connectAndroid(node, settings);
       } else if (Platform.isWindows) {
         return await _connectWindows(node, settings);
       } else {
@@ -64,6 +95,96 @@ class VpnCoreService {
     } catch (e) {
       _state = VpnState.error;
       _errorMessage = e.toString();
+      return false;
+    }
+  }
+
+  /// Real Android VPN Execution using official Xray-core (libv2ray) with native TUN
+  Future<bool> _connectAndroid(ServerNode node, AppSettings settings) async {
+    try {
+      if (!_isV2rayInitialized) {
+        await _androidV2ray.initialize(
+          notificationIconResourceType: "mipmap",
+          notificationIconResourceName: "ic_launcher",
+        );
+        _isV2rayInitialized = true;
+      }
+
+      final bool hasPermission = await _androidV2ray.requestPermission();
+      if (!hasPermission) {
+        _state = VpnState.error;
+        _errorMessage = 'VPN permission was rejected by user';
+        return false;
+      }
+
+      String configJson = '';
+      String remark = node.name;
+
+      if (node.rawUri.isNotEmpty && (node.rawUri.startsWith('vless://') || node.rawUri.startsWith('vmess://') || node.rawUri.startsWith('trojan://') || node.rawUri.startsWith('ss://'))) {
+        try {
+          final parser = V2ray.parseFromURL(node.rawUri);
+          remark = parser.remark.isNotEmpty ? parser.remark : node.name;
+          configJson = parser.getFullConfiguration();
+        } catch (_) {
+          configJson = ConfigParser.generateXrayConfig(node, settings);
+        }
+      } else {
+        configJson = ConfigParser.generateXrayConfig(node, settings);
+      }
+
+      _activeEngine = 'Xray-core (Android)';
+      _state = VpnState.connecting;
+
+      List<String>? bypassSubnets;
+      if (settings.routingMode == RoutingMode.bypassLanAndIran) {
+        bypassSubnets = const [
+          "0.0.0.0/5",
+          "8.0.0.0/7",
+          "11.0.0.0/8",
+          "12.0.0.0/6",
+          "16.0.0.0/4",
+          "32.0.0.0/3",
+          "64.0.0.0/2",
+          "128.0.0.0/3",
+          "160.0.0.0/5",
+          "168.0.0.0/6",
+          "172.0.0.0/12",
+          "172.32.0.0/11",
+          "172.64.0.0/10",
+          "172.128.0.0/9",
+          "173.0.0.0/8",
+          "174.0.0.0/7",
+          "176.0.0.0/4",
+          "192.0.0.0/9",
+          "192.128.0.0/11",
+          "192.160.0.0/13",
+          "192.169.0.0/16",
+          "192.170.0.0/15",
+          "192.172.0.0/14",
+          "192.176.0.0/12",
+          "192.192.0.0/10",
+          "193.0.0.0/8",
+          "194.0.0.0/7",
+          "196.0.0.0/6",
+          "200.0.0.0/5",
+          "208.0.0.0/4",
+          "240.0.0.0/4",
+        ];
+      }
+
+      await _androidV2ray.startV2Ray(
+        remark: remark,
+        config: configJson,
+        bypassSubnets: bypassSubnets,
+        proxyOnly: false,
+        notificationDisconnectButtonName: "DISCONNECT",
+      );
+
+      _state = VpnState.connected;
+      return true;
+    } catch (e) {
+      _state = VpnState.error;
+      _errorMessage = 'Android Connection Error: $e';
       return false;
     }
   }
@@ -149,7 +270,7 @@ class VpnCoreService {
 
     try {
       if (Platform.isAndroid) {
-        await _androidChannel.invokeMethod('stopVpn');
+        await _androidV2ray.stopV2Ray();
       } else if (Platform.isWindows) {
         // Kill core process
         if (_coreProcess != null) {

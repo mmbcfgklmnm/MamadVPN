@@ -20,11 +20,19 @@ class VpnController extends ChangeNotifier {
   bool get isDisconnected => _vpnService.state == VpnState.disconnected;
   String? get errorMessage => _vpnService.errorMessage;
 
-  VpnController({
+  factory VpnController({
     VpnCoreService? vpnService,
     TrafficService? trafficService,
-  })  : _vpnService = vpnService ?? VpnCoreService(),
-        _trafficService = trafficService ?? TrafficService() {
+  }) {
+    final traffic = trafficService ?? TrafficService();
+    final vpn = vpnService ?? VpnCoreService(trafficService: traffic);
+    return VpnController._(vpn, traffic);
+  }
+
+  VpnController._(this._vpnService, this._trafficService) {
+    _vpnService.onStateChanged = (_) {
+      notifyListeners();
+    };
     _trafficSub = _trafficService.statsStream.listen((stats) {
       _trafficStats = stats;
       notifyListeners();

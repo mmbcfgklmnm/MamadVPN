@@ -28,6 +28,9 @@ dependencies:
   # Native & Utilities
   path_provider: ^2.1.2
 
+  # Core VPN Tunnel Engine (Android native Xray/libv2ray)
+  flutter_v2ray_client: ^3.4.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
