@@ -55,7 +55,8 @@ class VpnCoreService {
     }
     onStateChanged?.call(_state);
 
-    if (_trafficService != null) {
+    final traffic = _trafficService;
+    if (traffic != null) {
       Duration duration = Duration.zero;
       try {
         final parts = status.duration.split(':');
@@ -67,7 +68,7 @@ class VpnCoreService {
         }
       } catch (_) {}
 
-      _trafficService.updateAndroidMetrics(
+      traffic.updateAndroidMetrics(
         downloadSpeed: status.downloadSpeed.toDouble(),
         uploadSpeed: status.uploadSpeed.toDouble(),
         sessionDownloaded: status.download,
