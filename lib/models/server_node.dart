@@ -269,7 +269,7 @@ class ServerNode {
         'serverName': sni.isNotEmpty ? sni : address,
         'publicKey': publicKey,
         'shortId': shortId,
-        'spiderX': '',
+        if (path.isNotEmpty && (net == 'tcp' || net == '')) 'spiderX': path,
       };
     } else if (security == 'tls') {
       streamSettings['security'] = 'tls';
@@ -283,6 +283,10 @@ class ServerNode {
     }
 
     outbound['streamSettings'] = streamSettings;
+    outbound['mux'] = {
+      'enabled': false,
+      'concurrency': 8,
+    };
     return outbound;
   }
 }

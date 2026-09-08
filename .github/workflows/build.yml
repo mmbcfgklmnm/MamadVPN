@@ -44,6 +44,12 @@ jobs:
       - name: Run Tests
         run: flutter test
 
+      - name: Download GeoIP and GeoSite Routing Data for Android
+        run: |
+          mkdir -p android/app/src/main/assets
+          curl -L -s --retry 3 --connect-timeout 20 -o android/app/src/main/assets/geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat
+          curl -L -s --retry 3 --connect-timeout 20 -o android/app/src/main/assets/geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat
+
       - name: Build Android Release APK (Universal)
         run: flutter build apk --release
 

@@ -118,65 +118,35 @@ class VpnCoreService {
         return false;
       }
 
-      String configJson = '';
-      String remark = node.name;
+      String remark = node.name.isNotEmpty ? node.name : 'MamadVPN';
+      Map<String, dynamic>? customOutbound;
 
       if (node.rawUri.isNotEmpty && (node.rawUri.startsWith('vless://') || node.rawUri.startsWith('vmess://') || node.rawUri.startsWith('trojan://') || node.rawUri.startsWith('ss://'))) {
         try {
           final parser = V2ray.parseFromURL(node.rawUri);
-          remark = parser.remark.isNotEmpty ? parser.remark : node.name;
-          configJson = parser.getFullConfiguration();
-        } catch (_) {
-          configJson = ConfigParser.generateXrayConfig(node, settings);
-        }
-      } else {
-        configJson = ConfigParser.generateXrayConfig(node, settings);
+          if (parser.remark.isNotEmpty) {
+            remark = parser.remark;
+          }
+          final rawOutbound = parser.removeNulls(parser.outbound1);
+          if (rawOutbound is Map) {
+            customOutbound = Map<String, dynamic>.from(rawOutbound);
+          }
+        } catch (_) {}
       }
+
+      final configJson = ConfigParser.generateAndroidXrayConfig(
+        node,
+        settings,
+        customOutbound: customOutbound,
+      );
 
       _activeEngine = 'Xray-core (Android)';
       _state = VpnState.connecting;
 
-      List<String>? bypassSubnets;
-      if (settings.routingMode == RoutingMode.bypassLanAndIran) {
-        bypassSubnets = const [
-          "0.0.0.0/5",
-          "8.0.0.0/7",
-          "11.0.0.0/8",
-          "12.0.0.0/6",
-          "16.0.0.0/4",
-          "32.0.0.0/3",
-          "64.0.0.0/2",
-          "128.0.0.0/3",
-          "160.0.0.0/5",
-          "168.0.0.0/6",
-          "172.0.0.0/12",
-          "172.32.0.0/11",
-          "172.64.0.0/10",
-          "172.128.0.0/9",
-          "173.0.0.0/8",
-          "174.0.0.0/7",
-          "176.0.0.0/4",
-          "192.0.0.0/9",
-          "192.128.0.0/11",
-          "192.160.0.0/13",
-          "192.169.0.0/16",
-          "192.170.0.0/15",
-          "192.172.0.0/14",
-          "192.176.0.0/12",
-          "192.192.0.0/10",
-          "193.0.0.0/8",
-          "194.0.0.0/7",
-          "196.0.0.0/6",
-          "200.0.0.0/5",
-          "208.0.0.0/4",
-          "240.0.0.0/4",
-        ];
-      }
-
       await _androidV2ray.startV2Ray(
         remark: remark,
         config: configJson,
-        bypassSubnets: bypassSubnets,
+        bypassSubnets: null, // Full default route (0.0.0.0/0) cleanly captured by TUN
         proxyOnly: false,
         notificationDisconnectButtonName: "DISCONNECT",
       );

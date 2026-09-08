@@ -576,4 +576,133 @@ class ConfigParser {
 
     return const JsonEncoder.withIndent('  ').convert(config);
   }
+
+  /// Builds a complete, rock-solid Xray-core configuration specifically tailored for Android VpnService & tun2socks
+  static String generateAndroidXrayConfig(
+    ServerNode node,
+    AppSettings settings, {
+    Map<String, dynamic>? customOutbound,
+  }) {
+    final Map<String, dynamic> proxyOutbound = customOutbound != null
+        ? Map<String, dynamic>.from(customOutbound)
+        : node.toXrayOutbound();
+    proxyOutbound['tag'] = 'proxy';
+
+    final Map<String, dynamic> config = {
+      'log': {'loglevel': 'warning'},
+      'stats': <String, dynamic>{},
+      'policy': {
+        'system': {
+          'statsInboundUplink': true,
+          'statsInboundDownlink': true,
+          'statsOutboundUplink': true,
+          'statsOutboundDownlink': true,
+        },
+      },
+      'dns': {
+        'servers': [
+          '1.1.1.1',
+          '8.8.8.8',
+          'https://1.1.1.1/dns-query',
+          'https://8.8.8.8/dns-query',
+        ],
+        'queryStrategy': 'UseIPv4',
+      },
+      'inbounds': [
+        // SOCKS5 inbound for Android tun2socks (must match LOCAL_SOCKS5_PORT 10808)
+        {
+          'tag': 'in_proxy',
+          'port': 10808,
+          'listen': '127.0.0.1',
+          'protocol': 'socks',
+          'settings': {
+            'auth': 'noauth',
+            'udp': true,
+            'userLevel': 8,
+          },
+          'sniffing': {
+            'enabled': true,
+            'destOverride': ['http', 'tls', 'quic'],
+            'routeOnly': false,
+          },
+        },
+        // HTTP inbound on 10809
+        {
+          'tag': 'http-in',
+          'port': 10809,
+          'listen': '127.0.0.1',
+          'protocol': 'http',
+        },
+      ],
+      'outbounds': [
+        proxyOutbound,
+        {
+          'tag': 'direct',
+          'protocol': 'freedom',
+          'settings': {
+            'domainStrategy': 'UseIPv4',
+          },
+        },
+        {
+          'tag': 'block',
+          'protocol': 'blackhole',
+          'settings': {
+            'response': {
+              'type': 'none',
+            },
+          },
+        },
+        {
+          'tag': 'dns-out',
+          'protocol': 'dns',
+        },
+      ],
+      'routing': {
+        'domainStrategy': 'IPIfNonMatch',
+        'rules': [
+          // Hijack all DNS queries from in_proxy to internal dns-out
+          {
+            'type': 'field',
+            'inboundTag': ['in_proxy'],
+            'port': '53',
+            'outboundTag': 'dns-out',
+          },
+          // Route private/LAN IPs directly
+          {
+            'type': 'field',
+            'ip': [
+              'geoip:private',
+              '10.0.0.0/8',
+              '172.16.0.0/12',
+              '192.168.0.0/16',
+              '127.0.0.0/8',
+            ],
+            'outboundTag': 'direct',
+          },
+          // Bypass Iranian domains and IPs if mode is bypassLanAndIran
+          if (settings.routingMode == RoutingMode.bypassLanAndIran) ...[
+            {
+              'type': 'field',
+              'ip': ['geoip:ir'],
+              'outboundTag': 'direct',
+            },
+            {
+              'type': 'field',
+              'domain': ['geosite:ir'],
+              'outboundTag': 'direct',
+            },
+          ],
+          // All other traffic goes through the proxy
+          {
+            'type': 'field',
+            'network': 'tcp,udp',
+            'outboundTag': 'proxy',
+          },
+        ],
+      },
+    };
+
+    return const JsonEncoder.withIndent('  ').convert(config);
+  }
 }
+

@@ -172,5 +172,38 @@ proxies:
       expect(xrayConfig, contains('StatsService'));
       expect(xrayConfig, contains('10085'));
     });
+
+    test('Generate Android Xray configuration with SOCKS 10808, DNS hijacking, and sniffing', () {
+      const uri = 'vless://uuid123@example.com:443?security=reality&sni=speedtest.net&type=tcp&flow=xtls-rprx-vision&pbk=pubkey123#Frankfurt';
+      final node = ConfigParser.parseSingle(uri)!;
+      const settings = AppSettings(
+        routingMode: RoutingMode.bypassLanAndIran,
+      );
+
+      final androidConfig = ConfigParser.generateAndroidXrayConfig(node, settings);
+      final Map<String, dynamic> json = jsonDecode(androidConfig);
+
+      // Verify inbounds
+      final inbounds = json['inbounds'] as List;
+      final socksInbound = inbounds.firstWhere((i) => i['protocol'] == 'socks');
+      expect(socksInbound['port'], 10808);
+      expect(socksInbound['settings']['udp'], true);
+      expect(socksInbound['sniffing']['enabled'], true);
+
+      // Verify DNS
+      expect(json['dns']['servers'], contains('1.1.1.1'));
+      expect(json['dns']['servers'], contains('8.8.8.8'));
+
+      // Verify outbounds
+      final outbounds = json['outbounds'] as List;
+      expect(outbounds.any((o) => o['tag'] == 'proxy'), true);
+      expect(outbounds.any((o) => o['tag'] == 'dns-out'), true);
+
+      // Verify routing
+      final rules = json['routing']['rules'] as List;
+      final dnsRule = rules.firstWhere((r) => r['outboundTag'] == 'dns-out');
+      expect(dnsRule['port'], '53');
+    });
   });
 }
+
