@@ -278,7 +278,7 @@ class _AddServerDialogState extends State<AddServerDialog> with SingleTickerProv
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: isDark ? AppColors.darkSurfaceLight.withOpacity(0.5) : Colors.grey.shade100,
+                            color: isDark ? AppColors.darkCard.withOpacity(0.5) : Colors.grey.shade100,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Row(
